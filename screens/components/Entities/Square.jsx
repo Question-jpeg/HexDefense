@@ -32,8 +32,6 @@ const Square = React.forwardRef(
     const currentMoveAnimatedValue = useRef(0);
     const offset = [coords[0] * size * 0.92, coords[1] * size * 0.535];
 
-    const { field } = useContext(FieldContext);
-
     const getMoveData = (path) => {
       const steps = path.length - 1;
       if (steps !== 0)
@@ -49,13 +47,18 @@ const Square = React.forwardRef(
       return null;
     };
 
-    const moveDataRef = useRef();
-    const planMoveDataRef = useRef(getMoveData(instructionRef.current));
-    const [moveData, setMoveData] = useState();
+    const moveDataRef = useRef(getMoveData(instructionRef.current));
+    const planMoveDataRef = useRef();
+    const [moveData, setMoveData] = useState(
+      getMoveData(instructionRef.current)
+    );
 
     const entityRef = useRef();
 
-    const hpMax = 220;
+    const { gunChoicerRef, waveCounterRef } = useContext(FieldContext);
+
+    const waveCount = waveCounterRef.current.getWaveCount();
+    const hpMax = 300 * waveCount;
     const hpRef = useRef(hpMax);
     const hpAnimatedValue = useRef(new Animated.Value(hpMax)).current;
 
@@ -77,12 +80,12 @@ const Square = React.forwardRef(
     };
 
     useImperativeHandle(ref, () => ({
-      calculatePath: (newField, doubled, actionType) => {
+      calculatePath: (newField, doubled, walkable) => {
         if (
           !moveDataRef.current.path.some(
             (cur) => cur[0] === doubled[0] && cur[1] === doubled[1]
           ) &&
-          !actionType
+          !walkable
         ) {
           planMoveDataRef.current = moveDataRef.current;
           return true;
@@ -113,13 +116,17 @@ const Square = React.forwardRef(
               ...moveDataRef.current.path.slice(0, currentStep),
               ...path,
             ];
-            planMoveDataRef.current = getMoveData(newPath)
+            planMoveDataRef.current = getMoveData(newPath);
 
             return true;
           }
 
           return false;
         }
+      },
+      applyPath: () => {
+        setMoveData(planMoveDataRef.current);
+        moveDataRef.current = planMoveDataRef.current;
       },
       getCurrentCoords: () => {
         return new Promise((resolve) => {
@@ -148,13 +155,18 @@ const Square = React.forwardRef(
           const hp = hpRef.current - quantity;
           hpRef.current = hp;
           hpAnimatedValue.setValue(hp < 0 ? 0 : hp);
+          
 
-          if (hp <= 0)
+          if (hp <= 0) {
             animate(
               onLayoutAnimatedValue,
               { toValue: 0, duration: 500 },
-              destroySelf
+              () => {
+                destroySelf();
+              }
             );
+            gunChoicerRef.current.addMoney(waveCount);
+          }
         }
       },
     }));
@@ -174,13 +186,6 @@ const Square = React.forwardRef(
         animateMove();
       }
     }, [moveData]);
-
-    useEffect(() => {
-      if (field) {
-        setMoveData(planMoveDataRef.current);
-        moveDataRef.current = planMoveDataRef.current;
-      }
-    }, [field]);
 
     return (
       moveData && (
@@ -228,6 +233,10 @@ const Square = React.forwardRef(
                   }),
                 },
               ],
+              opacity: hpAnimatedValue.interpolate({
+                inputRange: [hpMax - 1, hpMax],
+                outputRange: [1, 0],
+              }),
               alignSelf: "center",
               bottom: -size * 0.25,
               height: size * 0.08,

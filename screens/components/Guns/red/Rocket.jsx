@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useRef } from "react";
 import { Animated, Easing, View, Dimensions } from "react-native";
+import GunsInfo from "../../../../config/GunsInfo";
 import { animate } from "../../../../utils/animate";
 import { FieldContext } from "../../../../utils/fieldContext";
 
@@ -14,8 +15,8 @@ export default function Rocket({
   destroySelf,
 }) {
   const speed = 10;
-  const interval = 100;
-  const maxAngle = Math.PI / 12;
+  const interval = 50;
+  const maxAngle = Math.PI / 9;
 
   const xRef = useRef(gunCoords.x + coords.x);
   const yRef = useRef(gunCoords.y + coords.y);
@@ -27,113 +28,100 @@ export default function Rocket({
 
   const { entitiesRef } = useContext(FieldContext);
 
-  const isUnmountedRef = useRef();
-
   const mainStep = async () => {
-    if (!isUnmountedRef.current) {
-      const angleToWork =
-        angleRef.current -
-        Number.parseInt(angleRef.current / (Math.PI * 2)) * Math.PI * 2;
+    const angleToWork =
+      angleRef.current -
+      Number.parseInt(angleRef.current / (Math.PI * 2)) * Math.PI * 2;
 
-      xRef.current += Math.cos(angleToWork) * speed;
-      yRef.current += Math.sin(angleToWork) * speed;
+    xRef.current += Math.cos(angleToWork) * speed;
+    yRef.current += Math.sin(angleToWork) * speed;
 
-      const x = xRef.current;
-      const y = yRef.current;
+    const x = xRef.current;
+    const y = yRef.current;
 
-      if (
-        y > screenHeight * 2 ||
-        y < -screenHeight ||
-        x > screenWidth * 2 ||
-        x < -screenWidth
-      )
-        destroySelf();
-      else {
-        animate(xAnimatedValue, {
-          toValue: xRef.current - gunCoords.x,
-          duration: interval,
-          easing: Easing.linear,
-        });
-        animate(yAnimatedValue, {
-          toValue: yRef.current - gunCoords.y,
-          duration: interval,
-          easing: Easing.linear,
-        });
+    if (y > screenHeight + 100 || y < -100 || x > screenWidth + 100 || x < -100)
+      destroySelf();
+    else {
+      animate(xAnimatedValue, {
+        toValue: xRef.current - gunCoords.x,
+        duration: interval,
+        easing: Easing.linear,
+      });
+      animate(yAnimatedValue, {
+        toValue: yRef.current - gunCoords.y,
+        duration: interval,
+        easing: Easing.linear,
+      });
 
-        const entities = Object.values(entitiesRef.current).filter(
-          (ref) => !ref.isDead()
+      const entities = Object.values(entitiesRef.current).filter(
+        (ref) => !ref.isDead()
+      );
+
+      if (entities.length) {
+        const targetEntity = entities.reduce(
+          (prev, cur) =>
+            cur.getRemainingSteps() < prev.getRemainingSteps() ? cur : prev,
+          { getRemainingSteps: () => 999 }
         );
 
-        if (entities.length) {
-          const targetEntity = entities.reduce(
-            (prev, cur) =>
-              cur.getRemainingSteps() < prev.getRemainingSteps() ? cur : prev,
-            { getRemainingSteps: () => 999 }
-          );
-
-          const targetCoords = await targetEntity.getCurrentCoords();
-          const target = targetCoords.center;
-          const distance = Math.sqrt(
-            Math.pow(target.x - x, 2) + Math.pow(target.y - y, 2)
-          );
-          if (distance < targetCoords.width) {
-            targetEntity.damage(40);
-            destroySelf();
-          } else {
-            const coef = (target.y - y) / (target.x - x);
-            const angle = Math.atan(coef) + (target.x < x ? Math.PI : 0);
-
-            let turnAngle = 0;
-
-            if (angle > angleToWork) {
-              const rightDiff = angle - angleToWork;
-              if (rightDiff > Math.PI)
-                turnAngle = -(angleToWork + Math.PI * 2 - angle);
-              else turnAngle = rightDiff;
-            } else {
-              const leftDiff = angle - angleToWork;
-              if (leftDiff < -Math.PI)
-                turnAngle = angle + Math.PI * 2 - angleToWork;
-              else turnAngle = leftDiff;
-            }
-
-            angleRef.current +=
-              Math.abs(turnAngle) > maxAngle
-                ? turnAngle > 0
-                  ? maxAngle
-                  : -maxAngle
-                : turnAngle;
-
-            animate(
-              angleAnimatedValue,
-              {
-                toValue: angleRef.current,
-                duration: interval,
-                easing: Easing.linear,
-              },
-              mainStep
-            );
-          }
+        const targetCoords = await targetEntity.getCurrentCoords();
+        const target = targetCoords.center;
+        const distance = Math.sqrt(
+          Math.pow(target.x - x, 2) + Math.pow(target.y - y, 2)
+        );
+        if (distance < targetCoords.width * 0.5) {
+          destroySelf();
+          targetEntity && targetEntity.damage(GunsInfo.rg.damage);
         } else {
-          setTimeout(mainStep, interval);
+          const coef = (target.y - y) / (target.x - x);
+          const angle = Math.atan(coef) + (target.x < x ? Math.PI : 0);
+
+          let turnAngle = 0;
+
+          if (angle > angleToWork) {
+            const rightDiff = angle - angleToWork;
+            if (rightDiff > Math.PI)
+              turnAngle = -(angleToWork + Math.PI * 2 - angle);
+            else turnAngle = rightDiff;
+          } else {
+            const leftDiff = angle - angleToWork;
+            if (leftDiff < -Math.PI)
+              turnAngle = angle + Math.PI * 2 - angleToWork;
+            else turnAngle = leftDiff;
+          }
+
+          angleRef.current +=
+            Math.abs(turnAngle) > maxAngle
+              ? turnAngle > 0
+                ? maxAngle
+                : -maxAngle
+              : turnAngle;
+
+          animate(
+            angleAnimatedValue,
+            {
+              toValue: angleRef.current,
+              duration: interval,
+              easing: Easing.linear,
+            },
+            mainStep
+          );
         }
+      } else {
+        setTimeout(mainStep, interval);
       }
     }
   };
 
   useEffect(() => {
     mainStep();
-
-    return function cleanup() {
-      isUnmountedRef.current = true;
-    };
   }, []);
 
   return (
     <Animated.View
       pointerEvents="box-none"
       style={{
-        height: size * 0.75,
+        height: size * 0.7,
         borderLeftWidth: size,
         borderBottomWidth: size * 0.3,
         borderTopWidth: size * 0.3,
@@ -142,6 +130,10 @@ export default function Rocket({
         borderLeftColor: "orange",
         borderRadius: "100%",
         position: "absolute",
+        // shadowOpacity: 1,
+        // shadowOffset: { width: 0, height: 0 },
+        // shadowColor: "orange",
+        // shadowRadius: 10,
         transform: [
           {
             translateX: xAnimatedValue,

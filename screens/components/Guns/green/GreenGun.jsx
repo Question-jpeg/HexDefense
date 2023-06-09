@@ -1,22 +1,24 @@
 import React, { useContext, useEffect, useRef } from "react";
-import { Animated, View } from "react-native";
+import { Animated, Easing, View } from "react-native";
+import GunsInfo from "../../../../config/GunsInfo";
 import { FieldContext } from "../../../../utils/fieldContext";
 import { animate } from "./../../../../utils/animate";
+import { Feather } from "@expo/vector-icons";
 
-export default function GreenGun({ level, size, cellSize, coords }) {
+export default function GreenGun({ level, size, cellSize, isSelected, isActive }) {
   const rotateAnimatedValue = useRef(new Animated.Value(0)).current;
   const lazerAnimatedValue = useRef(new Animated.Value(0)).current;
   const selectionAnimatedValue = useRef(new Animated.Value(0)).current;
 
-  const { entitiesRef, selectedGun } = useContext(FieldContext);
+  const { entitiesRef } = useContext(FieldContext);
 
   const gunRef = useRef();
 
   const intervalRef = useRef();
 
-  const distanceConstant = cellSize * 1.1 + cellSize;
+  const distanceConstant = cellSize * 1.1 * 2 + cellSize / 2;
 
-  useEffect(() => {
+  const startInterval = () => {
     intervalRef.current = setInterval(() => {
       gunRef.current?.measure(async (fx, fy, width, height, px, py) => {
         const gunCoords = { x: px + width / 2, y: py + height / 2 };
@@ -128,26 +130,37 @@ export default function GreenGun({ level, size, cellSize, coords }) {
               0
             ) / 2;
           rotateAnimatedValue.setValue(angle);
-          animate(lazerAnimatedValue, { toValue: 1, duration: 300 }, () =>
-            lazerAnimatedValue.setValue(0)
+          animate(
+            lazerAnimatedValue,
+            { toValue: 1, duration: 300, easing: Easing.linear },
+            () => lazerAnimatedValue.setValue(0)
           );
-          resultRefs.forEach((ref) => ref.damage(40 * level));
+          resultRefs.forEach((ref) => ref.damage(GunsInfo.gg.damage * level));
         }
       });
     }, 1000);
+  };
 
+  const stopInterval = () => {
+    clearInterval(intervalRef.current);
+  };
+
+  useEffect(() => {
     return function cleanup() {
-      clearInterval(intervalRef.current);
+      stopInterval();
     };
   }, []);
 
   useEffect(() => {
-    if (coords.toString() === selectedGun.toString())
-      animate(selectionAnimatedValue, { toValue: 1, duration: 500 });
-    else {
-      animate(selectionAnimatedValue, { toValue: 0, duration: 500 });
-    }
-  }, [selectedGun]);
+    let toValue = 0;
+    if (isSelected) toValue = 1;
+    animate(selectionAnimatedValue, { toValue, duration: 500 });
+  }, [isSelected]);
+
+  useEffect(() => {
+    if (isActive) startInterval();
+    else stopInterval();
+  }, [isActive]);
 
   const renderLazer = () => {
     return (
@@ -158,17 +171,17 @@ export default function GreenGun({ level, size, cellSize, coords }) {
           flex: 1,
           display: "flex",
           justifyContent: "center",
-          borderBottomLeftRadius: "100%",
+          borderBottomLeftRadius: level === 4 ? 0 : "100%",
         }}
       >
         <Animated.View
           style={{
             backgroundColor: "lightgreen",
             width: 2000,
-            height: 0.5,
+            height: level === 4 ? 1 : 0.5,
             opacity: lazerAnimatedValue.interpolate({
               inputRange: [0, 0.25, 0.5, 0.75, 1],
-              outputRange: [0, 0.5, 1, 0.5, 1],
+              outputRange: [0, 1, 0.5, 1, 0],
             }),
           }}
         ></Animated.View>
@@ -176,16 +189,17 @@ export default function GreenGun({ level, size, cellSize, coords }) {
     );
   };
 
-  const renderDecorLines = () =>
-    level === 4 && (
-      <View
-        style={{
-          backgroundColor: "#6DF826",
-          width: size * 0.8,
-          height: size * 0.04,
-        }}
-      ></View>
+
+  const renderTrapezoid = () => {
+    return (
+      <Feather
+        name="triangle"
+        size={size*0.8}
+        color="#6DF826"
+        style={{ position: "absolute", transform: [{ rotate: "90deg" }] }}
+      />
     );
+  };
 
   return (
     <View
@@ -217,11 +231,10 @@ export default function GreenGun({ level, size, cellSize, coords }) {
           gap: size * 0.1,
         }}
       >
-        {renderDecorLines()}
         <View
           style={{
             width: size,
-            gap: -size * 0.05,
+            gap: level === 4 ? -size * 0.3 : -size*0.1,
             right: -size * 0.2,
             backgroundColor: "black",
             display: "flex",
@@ -233,7 +246,7 @@ export default function GreenGun({ level, size, cellSize, coords }) {
           {level > 1 && renderLazer()}
           {level > 2 && renderLazer()}
         </View>
-        {renderDecorLines()}
+        {level === 4 && renderTrapezoid()}
       </Animated.View>
       <Animated.View
         pointerEvents="box-none"

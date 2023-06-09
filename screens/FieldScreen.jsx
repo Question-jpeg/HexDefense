@@ -1,51 +1,56 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Alert, Text } from "react-native";
-import { View, Dimensions, TouchableOpacity } from "react-native";
-import { colors } from "../utils/colors";
+import React, { useRef } from "react";
+import { View, Dimensions } from "react-native";
 import Hexagon from "./components/Hexagon";
-import Spawner from "./components/Spawner";
 import { rowColDoubler } from "./../utils/rowColDoubler";
 import { getConvertedField } from "./../utils/convertField";
 import { FieldContext } from "../utils/fieldContext";
 import { Node } from "../game_logic/pathfinding/Node";
 import GunChoicer from "./components/GunChoicer";
-import WhiteGun from "./components/Guns/white/WhiteGun";
-import GreenGun from "./components/Guns/green/GreenGun";
-import RedGun from "./components/Guns/red/RedGun";
-import BlueGun from "./components/Guns/blue/BlueGun";
+import GunsInfo from "../config/GunsInfo";
+import WaveCounter from "./components/WaveCounter";
 
 const screenWidth = Dimensions.get("screen").width;
 
 export default function FieldScreen() {
-  const [field, setField] = useState(
+  const fieldRef = useRef(
     getConvertedField([
       [true, false, true, true, true, true, true, true, true],
       ["s", true, false, false, true, true, true, true, true],
-      [false, false, true, true, false, true, true, "wg_3", true],
-      [true, true, false, true, false, false, true, true, true],
-      [true, true, false, false, true, false, true, "rg_1", true],
+      [false, false, true, true, false, true, true, true, true],
+      [true, true, false, true, true, false, true, true, true],
+      [true, true, false, false, true, false, true, true, true],
+      [true, true, true, true, true, false, true, true, true],
+      [true, true, true, true, true, false, true, true, true],
+      [true, true, true, true, true, false, true, true, true],
       [true, true, true, false, true, false, true, true, true],
-      [true, "rg_1", true, "bg_1", true, false, true, true, true],
-      [true, true, true, false, true, false, true, true, true],
-      [true, true, true, false, true, false, true, true, true],
-      [true, "gg_1", true, false, true, true, true, false, true],
-      [true, true, true, false, false, true, false, true, true],
+      [true, true, true, false, true, true, true, false, true],
+      [true, true, true, false, true, true, false, true, true],
     ])
   );
 
-  const [selectedGun, setSelectedGun] = useState([]);
-
-  const numberInRow = field[0].length;
+  const numberInRow = fieldRef.current[0].length;
   const size = screenWidth / numberInRow;
 
-  const spawners = useRef([]);
+  const spawnersRef = useRef([]);
   const entitiesRef = useRef({});
+  const hexRef = useRef({});
 
   const selectionRef = useRef();
+  const selectedGunRef = useRef();
+
+  const gunChoicerRef = useRef();
+  const waveCounterRef = useRef();
+
+  const addHex = (ref, row, col) => {
+    if (ref)
+      hexRef.current[row]
+        ? (hexRef.current[row][col] = ref)
+        : (hexRef.current[row] = { [col]: ref });
+  };
 
   const addSpawner = (ref) => {
-    if (ref && spawners.current.every((obj) => obj.id !== ref.id))
-      spawners.current.push(ref);
+    if (ref && spawnersRef.current.every((obj) => obj.id !== ref.id))
+      spawnersRef.current.push(ref);
   };
 
   const addEntity = (ref, id) => {
@@ -56,133 +61,88 @@ export default function FieldScreen() {
     delete entitiesRef.current[id];
   };
 
-  const placeObstacle = (row, col, doubled) => {
-    const node = field[row][col];
+  const placeObstacle = (row, col, type) => {
+    const [dRow, dCol] = rowColDoubler(row, col);
+    const doubled = [dCol, dRow];
 
-    const newField = field.map((row) =>
+    const newField = fieldRef.current.map((row) =>
       row.map((node) => Node.createFromNode(node))
     );
-    newField[row][col].Type = `${selectionRef.current}g_1`;
 
-    const spawnersResponse = spawners.current.map((ref) =>
-      ref.calculatePath(newField, doubled, !node.Type)
-    );
-    const entitiesResponse = Object.values(entitiesRef.current).map((ref) =>
-      ref.calculatePath(newField, doubled, !node.Type)
+    const node = newField[row][col];
+    node.Type = type;
+
+    const spawners = spawnersRef.current;
+    const entities = Object.values(entitiesRef.current);
+
+    const spawnersResponse = spawners.map((ref) =>
+      ref.calculatePath(newField, doubled, node.Walkable)
     );
 
-    if ([...spawnersResponse, ...entitiesResponse].every((value) => value))
-      setField(newField);
+    const entitiesResponse = entities.map((ref) =>
+      ref.calculatePath(newField, doubled, node.Walkable)
+    );
+
+    if ([...spawnersResponse, ...entitiesResponse].every((value) => value)) {
+      hexRef.current[row][col].setNodeType(node.Type);
+      fieldRef.current = newField;
+      spawners.forEach((ref) => ref.applyPath());
+      entities.forEach((ref) => ref.applyPath());
+    }
   };
 
   const renderHexagon = (row, col) => {
-    const node = field[row][col];
-    const [dRow, dCol] = rowColDoubler(row, col);
+    const node = fieldRef.current[row][col];
 
-    const strType = node.Type.toString();
-    const isGun = strType.includes("g");
-    const gunLevel = isGun && Number.parseInt(strType.split("_")[1]);
-
-    const zIndex = isGun
-      ? strType.includes("rg")
-        ? 4
-        : 3
-      : node.Type === "s"
-      ? 2
-      : node.Type === false
-      ? 1
-      : 0;
-
-    const renderView = () => (
+    return (
       <Hexagon
-        color={
-          node.Type === "s"
-            ? "#6F222C"
-            : node.Type === false
-            ? colors.background
-            : "black"
-        }
+        key={`${row}${col}`}
+        ref={(ref) => addHex(ref, row, col)}
+        row={row}
+        col={col}
+        type={node.Type}
         size={size}
-      >
-        {strType === "s" ? (
-          <Spawner
-            ref={addSpawner}
-            coords={[dCol, dRow]}
-            size={size}
-            addEntity={addEntity}
-            removeEntity={removeEntity}
-          />
-        ) : strType.includes("wg") ? (
-          <WhiteGun
-            size={size * 0.8}
-            level={gunLevel}
-            cellSize={size}
-            coords={[row, col]}
-          />
-        ) : strType.includes("rg") ? (
-          <RedGun
-            size={size * 0.8}
-            level={gunLevel}
-            cellSize={size}
-            coords={[row, col]}
-          />
-        ) : strType.includes("gg") ? (
-          <GreenGun
-            size={size * 0.8}
-            level={gunLevel}
-            cellSize={size}
-            coords={[row, col]}
-          />
-        ) : (
-          strType.includes("bg") && (
-            <BlueGun
-              size={size * 0.8}
-              level={gunLevel}
-              cellSize={size}
-              coords={[row, col]}
-            />
-          )
-        )}
-      </Hexagon>
-    );
+        addSpawner={addSpawner}
+        addEntity={addEntity}
+        removeEntity={removeEntity}
+        gunChoicerRef={gunChoicerRef}
+        selectedGunRef={selectedGunRef}
+        onPress={(nodeType) => {
+          const strType = nodeType.toString();
+          const isGun = strType.includes("g");
+          const selGun = selectedGunRef.current;
 
-    const style = {
-      zIndex,
-      elevation: zIndex,
-      marginTop: col % 2 ? size / 1.9 : 0,
-    };
-
-    const key = `${row} ${col}`;
-
-    return node.Type === "s" ? (
-      <View style={style} key={key}>
-        {renderView()}
-      </View>
-    ) : (
-      <TouchableOpacity
-        onPress={() => {
-          if (isGun) setSelectedGun([row, col]);
-          else {
-            if (node.Type && selectionRef.current) {
-              placeObstacle(row, col, [dCol, dRow]);
-            } else {
-              setSelectedGun([]);
+          if (isGun) {
+            if (selGun) hexRef.current[selGun.row][selGun.col].deselect();
+            hexRef.current[row][col].select();
+            selectedGunRef.current = { row, col };
+            gunChoicerRef.current.setSelectedGun(nodeType);
+          } else {
+            if (selGun) {
+              hexRef.current[selGun.row][selGun.col].deselect();
+              selectedGunRef.current = null;
+              gunChoicerRef.current.setSelectedGun(null);
+            }
+            if (selectionRef.current && nodeType && !selGun) {
+              if (gunChoicerRef.current.isAvailable()) {
+                gunChoicerRef.current.addMoney(
+                  -GunsInfo[`${selectionRef.current}g`].costs[0]
+                );
+                placeObstacle(row, col, `${selectionRef.current}g_1`);
+              }
             }
           }
         }}
-        style={style}
-        key={key}
-      >
-        {renderView()}
-      </TouchableOpacity>
+      />
     );
   };
 
   return (
     <FieldContext.Provider
-      value={{ field, entitiesRef, selectionRef, selectedGun }}
+      value={{ fieldRef, entitiesRef, gunChoicerRef, waveCounterRef }}
     >
       <View style={{ flex: 1, justifyContent: "flex-end", marginBottom: 50 }}>
+        <WaveCounter ref={waveCounterRef} />
         <View
           style={{
             display: "flex",
@@ -194,14 +154,44 @@ export default function FieldScreen() {
             rowGap: -size / 15,
           }}
         >
-          {Array.from(Array(field.length).keys()).map((row) =>
-            Array.from(Array(field[row].length).keys()).map((col) => {
-              return renderHexagon(row, col);
-            })
+          {Array.from(Array(fieldRef.current.length).keys()).map((row) =>
+            Array.from(Array(fieldRef.current[row].length).keys()).map(
+              (col) => {
+                return renderHexagon(row, col);
+              }
+            )
           )}
         </View>
       </View>
-      <GunChoicer />
+      <GunChoicer
+        ref={gunChoicerRef}
+        selectionRef={selectionRef}
+        selectedGunRef={selectedGunRef}
+        removeGun={() => {
+          const selGun = selectedGunRef.current;
+
+          const data = fieldRef.current[selGun.row][selGun.col].Type.split("_");
+          const [curType, curLevel] = [data[0], Number.parseInt(data[1])];
+
+          placeObstacle(selGun.row, selGun.col, true);
+          hexRef.current[selGun.row][selGun.col].deselect();
+
+          selectedGunRef.current = null;
+          gunChoicerRef.current.setSelectedGun(null);
+          gunChoicerRef.current.addMoney(GunsInfo[curType].sells[curLevel - 1]);
+        }}
+        upgradeGun={() => {
+          const selGun = selectedGunRef.current;
+          const data = fieldRef.current[selGun.row][selGun.col].Type.split("_");
+          const [curType, curLevel] = [data[0], Number.parseInt(data[1])];
+
+          const newType = `${curType}_${curLevel + 1}`;
+
+          fieldRef.current[selGun.row][selGun.col].Type = newType;
+          hexRef.current[selGun.row][selGun.col].upgrade(newType);
+          gunChoicerRef.current.addMoney(-GunsInfo[curType].costs[curLevel]);
+        }}
+      />
     </FieldContext.Provider>
   );
 }

@@ -36,3 +36,5 @@
 
 console.log([2, 12].toString() === [3, 12].toString());
 console.log([2, 12].toString());
+
+console.log(Boolean({}));

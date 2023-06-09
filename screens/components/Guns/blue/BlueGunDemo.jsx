@@ -1,8 +1,8 @@
 import React from "react";
 import { View } from "react-native";
 
-export default function BlueGunLevel1Demo({ size }) {
-  const renderSquare = (index, innerSize) => (
+export default function BlueGunDemo({ level, size }) {
+  const renderSquare = (index, count, innerSize) => (
     <View
       key={index}
       style={{
@@ -12,11 +12,12 @@ export default function BlueGunLevel1Demo({ size }) {
         position: "absolute",
         borderWidth: size * 0.04,
         borderRadius: innerSize * 0.15,
+        transform: [{ rotate: `${90 - (90 / count) * index}deg` }],
       }}
     ></View>
   );
 
-  const renderArray = [0];
+  const renderArray = [0, 1, 2, 3].slice(0, level);
 
   return (
     <View
@@ -37,7 +38,11 @@ export default function BlueGunLevel1Demo({ size }) {
       ></View>
       {[renderArray, renderArray].map((array, arrayIndex) =>
         array.map((index) =>
-          renderSquare(index, size * (1 - arrayIndex) + size * 0.3 * arrayIndex)
+          renderSquare(
+            index,
+            array.length,
+            size * (1 - arrayIndex) + size * 0.3 * arrayIndex
+          )
         )
       )}
     </View>

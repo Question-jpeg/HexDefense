@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { Animated, Easing, View } from "react-native";
+import GunsInfo from "../../../../config/GunsInfo";
 import { animate } from "../../../../utils/animate";
 
 export default function WhiteBullet({
@@ -10,7 +11,7 @@ export default function WhiteBullet({
   strength,
   destroySelf,
 }) {
-  const speed = 600 / 1000;
+  const speed = 500 / 1000;
   const tAV = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -23,7 +24,7 @@ export default function WhiteBullet({
       { toValue: 1, duration: distance / speed, easing: Easing.linear },
       () => {
         destroySelf();
-        targetRef.damage(15*strength)
+        targetRef && targetRef.damage(GunsInfo.wg.damage * strength);
       }
     );
   }, []);

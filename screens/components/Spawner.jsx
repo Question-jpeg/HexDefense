@@ -13,17 +13,19 @@ const Spawner = React.forwardRef(
   ({ size, coords, addEntity, removeEntity }, ref) => {
     const entitySpawnRef = useRef(0);
     const [entityArray, setEntityArray] = useState([]);
-    const { field } = useContext(FieldContext);
-    const pathRef = useRef([]);
-    const planPathRef = useRef(getCoordinatedPath(field, coords, [8, 20]));
+    const { fieldRef, waveCounterRef } = useContext(FieldContext);
+    const pathRef = useRef(
+      getCoordinatedPath(fieldRef.current, coords, [8, 20])
+    );
+    const planPathRef = useRef();
 
     useImperativeHandle(ref, () => ({
-      calculatePath: (newField, doubled, actionType) => {
+      calculatePath: (newField, doubled, walkable) => {
         if (
           !pathRef.current.some(
             (cur) => cur[0] === doubled[0] && cur[1] === doubled[1]
           ) &&
-          !actionType
+          !walkable
         ) {
           planPathRef.current = pathRef.current;
           return true;
@@ -32,6 +34,9 @@ const Spawner = React.forwardRef(
           if (path) planPathRef.current = path;
           return Boolean(path);
         }
+      },
+      applyPath: () => {
+        pathRef.current = planPathRef.current;
       },
     }));
 
@@ -43,15 +48,12 @@ const Spawner = React.forwardRef(
               return [...entities, entitySpawnRef.current++];
             if (entities.length === 0) {
               entitySpawnRef.current = 0;
+              waveCounterRef.current.incrementWaveCount();
             }
             return entities;
           });
       }, 1000);
     }, []);
-
-    useEffect(() => {
-      if (field) pathRef.current = planPathRef.current;
-    }, [field]);
 
     return (
       <>
