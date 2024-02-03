@@ -18,6 +18,22 @@ const Spawner = React.forwardRef(
       getCoordinatedPath(fieldRef.current, coords, [8, 20])
     );
     const planPathRef = useRef();
+    const spawnIntervalRef = useRef();
+
+    const startSpawn = () => {
+      spawnIntervalRef.current = setInterval(() => {
+        pathRef.current &&
+          setEntityArray((entities) => {
+            if (entitySpawnRef.current < 10)
+              return [...entities, entitySpawnRef.current++];
+
+            clearInterval(spawnIntervalRef.current);
+            entitySpawnRef.current = 0;
+
+            return entities;
+          });
+      }, 1000);
+    }
 
     useImperativeHandle(ref, () => ({
       calculatePath: (newField, doubled, walkable) => {
@@ -38,22 +54,15 @@ const Spawner = React.forwardRef(
       applyPath: () => {
         pathRef.current = planPathRef.current;
       },
+      startSpawn,
     }));
 
     useEffect(() => {
-      setInterval(() => {
-        pathRef.current &&
-          setEntityArray((entities) => {
-            if (entitySpawnRef.current < 10)
-              return [...entities, entitySpawnRef.current++];
-            if (entities.length === 0) {
-              entitySpawnRef.current = 0;
-              waveCounterRef.current.incrementWaveCount();
-            }
-            return entities;
-          });
-      }, 1000);
-    }, []);
+      if (entityArray.length == 0 && entitySpawnRef.current == 0) {
+        waveCounterRef.current.incrementWaveCount()
+        startSpawn()        
+      }
+    }, [entityArray])
 
     return (
       <>
@@ -66,10 +75,10 @@ const Spawner = React.forwardRef(
             size={size}
             instructionRef={pathRef}
             destroySelf={() => {
+              removeEntity(`${i}`);
               setEntityArray((entities) =>
                 entities.filter((index) => index !== i)
               );
-              removeEntity(`${i}`);
             }}
           />
         ))}
@@ -77,5 +86,7 @@ const Spawner = React.forwardRef(
     );
   }
 );
+
+Spawner.displayName = 'Spawner'
 
 export default Spawner;

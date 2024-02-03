@@ -1,10 +1,13 @@
-import React, { useImperativeHandle, useRef } from "react";
+import React, { useContext, useImperativeHandle, useRef } from "react";
 import { Text } from "react-native";
 import { useState } from "react";
+import { FieldContext } from './../../utils/fieldContext';
 
 const WaveCounter = React.forwardRef(({}, ref) => {
-  const waveCountRef = useRef(1);
-  const [waveCount, setWaveCount] = useState(1);
+
+  const { waveCountRef } = useContext(FieldContext)
+
+  const [waveCount, setWaveCount] = useState(waveCountRef.current);
   useImperativeHandle(ref, () => ({
     incrementWaveCount: () =>
       setWaveCount((count) => {

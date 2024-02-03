@@ -3,12 +3,14 @@ import React, {
   useEffect,
   useImperativeHandle,
   useRef,
-  useState,
 } from "react";
 import { Animated, View } from "react-native";
-import { FieldContext } from "../../../../utils/fieldContext";
 import { FontAwesome } from "@expo/vector-icons";
-import { animate } from "./../../../../utils/animate";
+import useGunProps from "../useGunProps";
+import useGunLogic from "../useGunLogic";
+import { getNearEntities } from "../../../../utils/getNearEntities";
+import { getClosestEntity } from "./../../../../utils/getClosestEntity";
+import { getTangensAngle } from "./../../../../utils/getTangensAngle";
 
 const levelConfig = {
   1: { shotInterval: 300, holes: [0], strength: 1, hexRadius: 1 },
@@ -23,106 +25,61 @@ const levelConfig = {
 };
 
 const WhiteGun = React.forwardRef(
-  ({ level, size, cellSize, isSelected, setBullets, isActive }, ref) => {
+  ({ level, size, cellSize, setBullets }, ref) => {
     const { shotInterval, holes, strength, hexRadius } = levelConfig[level];
 
-    const rotateAnimatedValue = useRef(new Animated.Value(0)).current;
-    const selectionAnimatedValue = useRef(new Animated.Value(0)).current;
-
-    const { entitiesRef } = useContext(FieldContext);
-
-    const gunRef = useRef();
+    const {
+      gunRef,
+      intervalRef,
+      entitiesRef,
+      rotateAnimatedValue,
+      selectionAnimatedValue,
+    } = useGunProps();
 
     const bulletsCounter = useRef(0);
-
-    const interalRef = useRef();
-
     const distanceConstant = cellSize * 1.1 * hexRadius + cellSize / 2;
 
-    const startInterval = () => {
-      interalRef.current = setInterval(() => {
-        gunRef.current?.measure(async (fx, fy, width, height, px, py) => {
-          const gunCoords = { x: px + width / 2, y: py + height / 2 };
-          const x = gunCoords.x;
-          const y = gunCoords.y;
+    const tickFunc = async (gunCoords, x, y) => {
+      const near = await getNearEntities(
+        Object.values(entitiesRef.current),
+        distanceConstant,
+        { x, y }
+      );
 
-          const near = (
-            await Promise.all(
-              Object.values(entitiesRef.current).map(
-                (ref) =>
-                  new Promise(async (resolve) => {
-                    if (ref.isDead()) resolve(null);
-                    else {
-                      const refCoords = (await ref.getCurrentCoords()).center;
-                      const distance = Math.sqrt(
-                        Math.pow(x - refCoords.x, 2) +
-                          Math.pow(y - refCoords.y, 2)
-                      );
-                      if (distance <= distanceConstant)
-                        resolve({ ref, refCoords });
-                      else resolve(null);
-                    }
-                  })
-              )
-            )
-          ).filter((data) => data);
+      if (near.length) {
+        const targetEntity = getClosestEntity(near);
+        const target = targetEntity.refCoords.center;
 
-          const targetEntity = near.reduce(
-            (prev, cur) =>
-              cur.ref.getRemainingSteps() < prev.ref.getRemainingSteps()
-                ? cur
-                : prev,
-            { ref: { getRemainingSteps: () => 999 } }
-          );
+        const angle = getTangensAngle({ x, y }, target);
+        rotateAnimatedValue.setValue(angle);
 
-          const target = targetEntity.refCoords;
-
-          if (target) {
-            const coef = (target.y - y) / (target.x - x);
-            const angle = Math.atan(coef) + (target.x < x ? Math.PI : 0);
-            rotateAnimatedValue.setValue(angle);
-
-            const max = size * 0.6;
-            const angleChange = holes[bulletsCounter.current % holes.length];
-            setBullets((buls) => [
-              ...buls,
-              {
-                coords: {
-                  x: Math.cos(angle + angleChange) * max,
-                  y: Math.sin(angle + angleChange) * max,
-                },
-                gunCoords,
-                strength,
-                target: { x: target.x - x, y: target.y - y },
-                targetRef: targetEntity.ref,
-                id: bulletsCounter.current++,
-              },
-            ]);
-          }
-        });
-      }, shotInterval);
+        const max = size * 0.6;
+        const angleChange = holes[bulletsCounter.current % holes.length];
+        setBullets((buls) => [
+          ...buls,
+          {
+            coords: {
+              x: Math.cos(angle + angleChange) * max,
+              y: Math.sin(angle + angleChange) * max,
+            },
+            gunCoords,
+            strength,
+            target: { x: target.x - x, y: target.y - y },
+            targetRef: targetEntity.ref,
+            id: bulletsCounter.current++,
+          },
+        ]);
+      }
     };
 
-    const stopInterval = () => {
-      clearInterval(interalRef.current);
-    };
-
-    useEffect(() => {
-      return function cleanup() {
-        stopInterval();
-      };
-    }, []);
-
-    useEffect(() => {
-      if (isActive) startInterval();
-      else stopInterval();
-    }, [isActive]);
-
-    useEffect(() => {
-      let toValue = 0;
-      if (isSelected) toValue = 1;
-      animate(selectionAnimatedValue, { toValue, duration: 500 });
-    }, [isSelected]);
+    useGunLogic({
+      ref,
+      gunRef,
+      intervalRef,
+      selectionAnimatedValue,
+      tickFunc,
+      tickIntervalValue: shotInterval,
+    });
 
     return (
       <View

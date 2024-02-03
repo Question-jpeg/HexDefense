@@ -46,7 +46,9 @@ const GunChoicer = React.forwardRef(
     const isUpgrading =
       selectedGunRef.current &&
       upgradingGuns.some(
-        (coords) => coords.row === selectedGunRef.current.row && coords.col === selectedGunRef.current.col
+        (coords) =>
+          coords.row === selectedGunRef.current.row &&
+          coords.col === selectedGunRef.current.col
       );
 
     const switchAnimatedValue = useRef(new Animated.Value(0)).current;
@@ -68,10 +70,12 @@ const GunChoicer = React.forwardRef(
       );
     };
 
-    const setSelectedGun = (selectedGun) => {
+    const setSelectedGun = (gunType, coords = null) => {
+      selectedGunRef.current = coords;
+
       let toValue = 0;
-      if (selectedGun) {
-        const [selectedGunKey, selectedGunLevel] = selectedGun.split("_");
+      if (gunType) {
+        const [selectedGunKey, selectedGunLevel] = gunType.split("_");
         setSelectedGunData({
           key: selectedGunKey,
           level: Number.parseInt(selectedGunLevel),
@@ -97,24 +101,29 @@ const GunChoicer = React.forwardRef(
 
         moneyIntervalRef.current = setInterval(() => {
           setMoneyValue((value) => {
-            displayingMoney.current = value;
             if (value === moneyRef.current) {
               clearInterval(moneyIntervalRef.current);
               return value;
             }
             if (value > moneyRef.current) {
+              displayingMoney.current--;
               return value - 1;
             }
+            displayingMoney.current++;
             return value + 1;
           });
-        }, 25 * (25 / (Math.abs(displayingMoney.current - moneyRef.current) ?? 1)));
+        }, 1000 / (Math.abs(displayingMoney.current - moneyRef.current) ?? 1));
       },
       addUpgrading: (coords) => {
         setUpgradingGuns((guns) => [...guns, coords]);
       },
       removeUpgrading: (coords, type) => {
-        if (selectedGunRef.current && selectedGunRef.current.row === coords.row && selectedGunRef.current.col === coords.col)
-          setSelectedGun(type);
+        if (
+          selectedGunRef.current &&
+          selectedGunRef.current.row === coords.row &&
+          selectedGunRef.current.col === coords.col
+        )
+          setSelectedGun(type, selectedGunRef.current);
         setUpgradingGuns((guns) =>
           guns.filter(
             (gun) => !(gun.row === coords.row && gun.col === coords.col)
@@ -339,5 +348,7 @@ const GunChoicer = React.forwardRef(
     );
   }
 );
+
+GunChoicer.displayName = "GunChoicer";
 
 export default GunChoicer;

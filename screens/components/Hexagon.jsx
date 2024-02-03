@@ -10,6 +10,7 @@ import BlueGun from "./Guns/blue/BlueGun";
 import Rocket from "./Guns/red/Rocket";
 import WhiteBullet from "./Guns/white/WhiteBullet";
 import ProgressPie from "./ProgressPie";
+import Base from "./Base";
 
 const getHexagonStyles = (size, color = "black") => {
   const coef = size / 90;
@@ -66,6 +67,7 @@ const Hexagon = React.forwardRef(
       type,
       addSpawner,
       addEntity,
+      addBase,
       removeEntity,
       onPress,
       gunChoicerRef,
@@ -79,7 +81,6 @@ const Hexagon = React.forwardRef(
     const isGun = strType.includes("g");
     const gunLevel = isGun && Number.parseInt(strType.split("_")[1]);
 
-    const [isSelected, setIsSelected] = useState(false);
     const [rockets, setRockets] = useState([]);
     const [bullets, setBullets] = useState([]);
     const [translation, setTranslation] = useState();
@@ -87,18 +88,18 @@ const Hexagon = React.forwardRef(
     const gunSpawnerRef = useRef();
 
     const progressPieRef = useRef();
-    const [isActive, setIsActive] = useState(true);
+
+    const gunRef = useRef();
 
     useImperativeHandle(ref, () => ({
       setNodeType,
-      deselect: () => setIsSelected(false),
-      select: () => setIsSelected(true),
+      deselect: gunRef.current?.deselect,
+      select: gunRef.current?.select,
       upgrade: (newType) => {
-        setIsActive(false);
+        gunRef.current.deactivate();
         gunChoicerRef.current.addUpgrading({ row, col });
         progressPieRef.current.animate(() => {
           setNodeType(newType);
-          setIsActive(true);
           gunChoicerRef.current.removeUpgrading({ row, col }, newType);
         });
       },
@@ -114,6 +115,12 @@ const Hexagon = React.forwardRef(
         });
       }
     }, [rockets, bullets]);
+
+    useEffect(() => {
+      if (isGun) {
+        gunRef.current.activate();
+      }
+    }, [nodeType]);
 
     const renderView = () => {
       return (
@@ -145,40 +152,38 @@ const Hexagon = React.forwardRef(
                 addEntity={addEntity}
                 removeEntity={removeEntity}
               />
+            ) : strType === "b" ? (
+              <Base ref={addBase} />
             ) : strType.includes("wg") ? (
               <WhiteGun
+                ref={gunRef}
                 size={size * 0.8}
                 level={gunLevel}
                 cellSize={size}
-                isSelected={isSelected}
-                isActive={isActive}
                 setBullets={setBullets}
               />
             ) : strType.includes("rg") ? (
               <RedGun
+                ref={gunRef}
                 size={size * 0.8}
                 level={gunLevel}
                 cellSize={size}
-                isSelected={isSelected}
-                isActive={isActive}
                 setRockets={setRockets}
               />
             ) : strType.includes("gg") ? (
               <GreenGun
+                ref={gunRef}
                 size={size * 0.8}
                 level={gunLevel}
                 cellSize={size}
-                isSelected={isSelected}
-                isActive={isActive}
               />
             ) : (
               strType.includes("bg") && (
                 <BlueGun
+                  ref={gunRef}
                   size={size * 0.8}
                   level={gunLevel}
                   cellSize={size}
-                  isSelected={isSelected}
-                  isActive={isActive}
                 />
               )
             )}
@@ -199,6 +204,8 @@ const Hexagon = React.forwardRef(
 
     const zIndex = isGun
       ? strType.includes("bg")
+        ? 5
+        : strType.includes("gg")
         ? 4
         : 3
       : nodeType === "s"
@@ -213,7 +220,7 @@ const Hexagon = React.forwardRef(
       marginTop: col % 2 ? size / 1.9 : 0,
     };
 
-    return nodeType === "s" ? (
+    return nodeType === "s" || nodeType === "b" ? (
       <View style={style}>{renderView()}</View>
     ) : (
       <>
@@ -243,6 +250,7 @@ const Hexagon = React.forwardRef(
                   key={rocket.id}
                   initAngle={rocket.angle}
                   coords={rocket.coords}
+                  distanceConstant={rocket.distanceConstant}
                   gunCoords={rocket.gunCoords}
                   size={size * 0.4}
                   destroySelf={() =>
@@ -276,5 +284,7 @@ const Hexagon = React.forwardRef(
     );
   }
 );
+
+Hexagon.displayName = "Hexagon";
 
 export default Hexagon;

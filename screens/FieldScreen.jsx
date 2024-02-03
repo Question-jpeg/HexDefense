@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { View, Dimensions } from "react-native";
 import Hexagon from "./components/Hexagon";
 import { rowColDoubler } from "./../utils/rowColDoubler";
@@ -8,30 +8,31 @@ import { Node } from "../game_logic/pathfinding/Node";
 import GunChoicer from "./components/GunChoicer";
 import GunsInfo from "../config/GunsInfo";
 import WaveCounter from "./components/WaveCounter";
+import { isTypeWalkable } from "../utils/isTypeWalkable";
 
 const screenWidth = Dimensions.get("screen").width;
 
-export default function FieldScreen() {
-  const fieldRef = useRef(
-    getConvertedField([
-      [true, false, true, true, true, true, true, true, true],
-      ["s", true, false, false, true, true, true, true, true],
-      [false, false, true, true, false, true, true, true, true],
-      [true, true, false, true, true, false, true, true, true],
-      [true, true, false, false, true, false, true, true, true],
-      [true, true, true, true, true, false, true, true, true],
-      [true, true, true, true, true, false, true, true, true],
-      [true, true, true, true, true, false, true, true, true],
-      [true, true, true, false, true, false, true, true, true],
-      [true, true, true, false, true, true, true, false, true],
-      [true, true, true, false, true, true, false, true, true],
-    ])
-  );
+export default function FieldScreen({ field }) {
+  const fieldRef = useRef();
+  fieldRef.current = [
+    [true, false, true, true, true, true, true, true, true],
+    ["s", true, false, false, true, true, true, true, true],
+    [false, false, true, true, false, true, true, true, true],
+    [true, true, false, true, true, false, true, true, true],
+    [true, true, false, false, true, false, true, true, true],
+    [true, true, true, true, true, false, true, true, true],
+    [true, true, true, true, true, false, true, true, true],
+    [true, true, true, true, true, false, true, true, true],
+    [true, true, true, false, true, false, true, true, true],
+    [true, true, true, false, true, true, true, false, true],
+    [true, true, true, false, true, true, false, true, "b"],
+  ];
 
   const numberInRow = fieldRef.current[0].length;
   const size = screenWidth / numberInRow;
 
-  const spawnersRef = useRef([]);
+  const spawnersRef = useRef({});
+  const basesRef = useRef({});
   const entitiesRef = useRef({});
   const hexRef = useRef({});
 
@@ -39,7 +40,9 @@ export default function FieldScreen() {
   const selectedGunRef = useRef();
 
   const gunChoicerRef = useRef();
+
   const waveCounterRef = useRef();
+  const waveCountRef = useRef(9);
 
   const addHex = (ref, row, col) => {
     if (ref)
@@ -48,9 +51,17 @@ export default function FieldScreen() {
         : (hexRef.current[row] = { [col]: ref });
   };
 
-  const addSpawner = (ref) => {
-    if (ref && spawnersRef.current.every((obj) => obj.id !== ref.id))
-      spawnersRef.current.push(ref);
+  const addSpawner = (ref, id) => {
+    if (ref) {
+      if (!spawnersRef.current[id]) {
+        spawnersRef.current[id] = ref;
+        // ref.startSpawn();
+      }
+    }
+  };
+
+  const addBase = (ref, id) => {
+    if (ref) basesRef.current[id] = ref;
   };
 
   const addEntity = (ref, id) => {
@@ -65,26 +76,22 @@ export default function FieldScreen() {
     const [dRow, dCol] = rowColDoubler(row, col);
     const doubled = [dCol, dRow];
 
-    const newField = fieldRef.current.map((row) =>
-      row.map((node) => Node.createFromNode(node))
-    );
+    const newField = fieldRef.current.map((row) => [...row]);
+    newField[row][col] = type;
 
-    const node = newField[row][col];
-    node.Type = type;
-
-    const spawners = spawnersRef.current;
+    const spawners = Object.values(spawnersRef.current);
     const entities = Object.values(entitiesRef.current);
 
     const spawnersResponse = spawners.map((ref) =>
-      ref.calculatePath(newField, doubled, node.Walkable)
+      ref.calculatePath(newField, doubled, isTypeWalkable(type))
     );
 
     const entitiesResponse = entities.map((ref) =>
-      ref.calculatePath(newField, doubled, node.Walkable)
+      ref.calculatePath(newField, doubled, isTypeWalkable(type))
     );
 
     if ([...spawnersResponse, ...entitiesResponse].every((value) => value)) {
-      hexRef.current[row][col].setNodeType(node.Type);
+      hexRef.current[row][col].setNodeType(type);
       fieldRef.current = newField;
       spawners.forEach((ref) => ref.applyPath());
       entities.forEach((ref) => ref.applyPath());
@@ -92,21 +99,21 @@ export default function FieldScreen() {
   };
 
   const renderHexagon = (row, col) => {
-    const node = fieldRef.current[row][col];
-
+    const type = fieldRef.current[row][col];
+    const id = `${row}${col}`;
     return (
       <Hexagon
-        key={`${row}${col}`}
+        key={id}
         ref={(ref) => addHex(ref, row, col)}
         row={row}
         col={col}
-        type={node.Type}
+        type={type}
         size={size}
-        addSpawner={addSpawner}
+        addSpawner={(ref) => addSpawner(ref, id)}
+        addBase={(ref) => addBase(ref, id)}
         addEntity={addEntity}
         removeEntity={removeEntity}
         gunChoicerRef={gunChoicerRef}
-        selectedGunRef={selectedGunRef}
         onPress={(nodeType) => {
           const strType = nodeType.toString();
           const isGun = strType.includes("g");
@@ -115,15 +122,12 @@ export default function FieldScreen() {
           if (isGun) {
             if (selGun) hexRef.current[selGun.row][selGun.col].deselect();
             hexRef.current[row][col].select();
-            selectedGunRef.current = { row, col };
-            gunChoicerRef.current.setSelectedGun(nodeType);
+            gunChoicerRef.current.setSelectedGun(nodeType, { row, col });
           } else {
             if (selGun) {
               hexRef.current[selGun.row][selGun.col].deselect();
-              selectedGunRef.current = null;
               gunChoicerRef.current.setSelectedGun(null);
-            }
-            if (selectionRef.current && nodeType && !selGun) {
+            } else if (selectionRef.current && nodeType === true) {
               if (gunChoicerRef.current.isAvailable()) {
                 gunChoicerRef.current.addMoney(
                   -GunsInfo[`${selectionRef.current}g`].costs[0]
@@ -139,7 +143,13 @@ export default function FieldScreen() {
 
   return (
     <FieldContext.Provider
-      value={{ fieldRef, entitiesRef, gunChoicerRef, waveCounterRef }}
+      value={{
+        fieldRef,
+        entitiesRef,
+        gunChoicerRef,
+        waveCounterRef,
+        waveCountRef,
+      }}
     >
       <View style={{ flex: 1, justifyContent: "flex-end", marginBottom: 50 }}>
         <WaveCounter ref={waveCounterRef} />
@@ -170,24 +180,23 @@ export default function FieldScreen() {
         removeGun={() => {
           const selGun = selectedGunRef.current;
 
-          const data = fieldRef.current[selGun.row][selGun.col].Type.split("_");
+          const data = fieldRef.current[selGun.row][selGun.col].split("_");
           const [curType, curLevel] = [data[0], Number.parseInt(data[1])];
 
           placeObstacle(selGun.row, selGun.col, true);
           hexRef.current[selGun.row][selGun.col].deselect();
 
-          selectedGunRef.current = null;
           gunChoicerRef.current.setSelectedGun(null);
           gunChoicerRef.current.addMoney(GunsInfo[curType].sells[curLevel - 1]);
         }}
         upgradeGun={() => {
           const selGun = selectedGunRef.current;
-          const data = fieldRef.current[selGun.row][selGun.col].Type.split("_");
+          const data = fieldRef.current[selGun.row][selGun.col].split("_");
           const [curType, curLevel] = [data[0], Number.parseInt(data[1])];
 
           const newType = `${curType}_${curLevel + 1}`;
 
-          fieldRef.current[selGun.row][selGun.col].Type = newType;
+          fieldRef.current[selGun.row][selGun.col] = newType;
           hexRef.current[selGun.row][selGun.col].upgrade(newType);
           gunChoicerRef.current.addMoney(-GunsInfo[curType].costs[curLevel]);
         }}

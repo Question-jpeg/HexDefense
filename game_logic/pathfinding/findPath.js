@@ -1,5 +1,6 @@
 import { rowColReverter } from "../../utils/rowColDoubler";
 import { Node } from "./Node";
+import { getConvertedField } from './../../utils/convertField';
 
 const findPath = (field, startNode, targetNode) => {
   const toSearch = [startNode];
@@ -49,9 +50,7 @@ const findPath = (field, startNode, targetNode) => {
 };
 
 export const getCoordinatedPath = (field, coordsStart, coordsEnd) => {
-  const newField = field.map((row) =>
-    row.map((node) => Node.createFromNode(node))
-  );
+  const newField = getConvertedField(field)
 
   const [startRow, startCol] = rowColReverter(coordsStart[1], coordsStart[0]);
   const [endRow, endCol] = rowColReverter(coordsEnd[1], coordsEnd[0]);

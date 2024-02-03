@@ -10,6 +10,8 @@ import { FieldContext } from "../../../utils/fieldContext";
 import { animate } from "./../../../utils/animate";
 import { getCoordinatedPath } from "./../../../game_logic/pathfinding/findPath";
 import { rowColReverter } from "../../../utils/rowColDoubler";
+import { offsetKpX, offsetKpY } from "../../../config/RenderInfo";
+import { isTypeWalkable } from './../../../utils/isTypeWalkable';
 
 export const renderSquare = () => (
   <View
@@ -30,7 +32,7 @@ const Square = React.forwardRef(
     const onLayoutAnimatedValue = useRef(new Animated.Value(0)).current;
     const moveAnimatedValue = useRef(new Animated.Value(0)).current;
     const currentMoveAnimatedValue = useRef(0);
-    const offset = [coords[0] * size * 0.92, coords[1] * size * 0.535];
+    const offset = [coords[0] * size * offsetKpX, coords[1] * size * offsetKpY];
 
     const getMoveData = (path) => {
       const steps = path.length - 1;
@@ -40,8 +42,8 @@ const Square = React.forwardRef(
           steps,
           stepsMap: Array.from(Array(steps + 1).keys()),
           moveMap: path.map((coords) => [
-            coords[0] * size * 0.92 - offset[0],
-            coords[1] * size * 0.535 - offset[1],
+            coords[0] * size * offsetKpX - offset[0],
+            coords[1] * size * offsetKpY - offset[1],
           ]),
         };
       return null;
@@ -55,9 +57,9 @@ const Square = React.forwardRef(
 
     const entityRef = useRef();
 
-    const { gunChoicerRef, waveCounterRef } = useContext(FieldContext);
+    const { gunChoicerRef, waveCountRef } = useContext(FieldContext);
 
-    const waveCount = waveCounterRef.current.getWaveCount();
+    const waveCount = waveCountRef.current;
     const hpMax = 300 * waveCount;
     const hpRef = useRef(hpMax);
     const hpAnimatedValue = useRef(new Animated.Value(hpMax)).current;
@@ -73,8 +75,9 @@ const Square = React.forwardRef(
           easing: Easing.linear,
         },
         () => {
-          if (currentMoveAnimatedValue.current === moveData.steps)
+          if (currentMoveAnimatedValue.current === moveData.steps) {
             destroySelf();
+          }
         }
       );
     };
@@ -108,8 +111,8 @@ const Square = React.forwardRef(
           );
 
           if (
-            newField[revertedStepRow][revertedStepCol].Walkable &&
-            newField[revertedCurrentRow][revertedCurrentCol].Walkable &&
+            isTypeWalkable(newField[revertedStepRow][revertedStepCol]) &&
+            isTypeWalkable(newField[revertedCurrentRow][revertedCurrentCol]) &&
             path
           ) {
             const newPath = [
@@ -155,7 +158,6 @@ const Square = React.forwardRef(
           const hp = hpRef.current - quantity;
           hpRef.current = hp;
           hpAnimatedValue.setValue(hp < 0 ? 0 : hp);
-          
 
           if (hp <= 0) {
             animate(
@@ -247,5 +249,7 @@ const Square = React.forwardRef(
     );
   }
 );
+
+Square.displayName = 'Square'
 
 export default Square;

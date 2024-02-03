@@ -4,163 +4,134 @@ import GunsInfo from "../../../../config/GunsInfo";
 import { FieldContext } from "../../../../utils/fieldContext";
 import { animate } from "./../../../../utils/animate";
 import { Feather } from "@expo/vector-icons";
+import useGunProps from "../useGunProps";
+import useGunLogic from "./../useGunLogic";
+import { getNearEntities } from "./../../../../utils/getNearEntities";
+import { getTangensAngle } from "../../../../utils/getTangensAngle";
 
-export default function GreenGun({ level, size, cellSize, isSelected, isActive }) {
-  const rotateAnimatedValue = useRef(new Animated.Value(0)).current;
+const GreenGun = React.forwardRef(({ level, size, cellSize }, ref) => {
+  const {
+    entitiesRef,
+    gunRef,
+    intervalRef,
+    rotateAnimatedValue,
+    selectionAnimatedValue,
+  } = useGunProps();
   const lazerAnimatedValue = useRef(new Animated.Value(0)).current;
-  const selectionAnimatedValue = useRef(new Animated.Value(0)).current;
-
-  const { entitiesRef } = useContext(FieldContext);
-
-  const gunRef = useRef();
-
-  const intervalRef = useRef();
-
   const distanceConstant = cellSize * 1.1 * 2 + cellSize / 2;
 
-  const startInterval = () => {
-    intervalRef.current = setInterval(() => {
-      gunRef.current?.measure(async (fx, fy, width, height, px, py) => {
-        const gunCoords = { x: px + width / 2, y: py + height / 2 };
-        const x = gunCoords.x;
-        const y = gunCoords.y;
+  const tickFunc = async (gunCoords, x, y) => {
+    const entitiesData = await getNearEntities(
+      Object.values(entitiesRef.current),
+      distanceConstant,
+      { x, y },
+      { searchNear: false }
+    );
 
-        const entitiesData = (
-          await Promise.all(
-            Object.values(entitiesRef.current).map(
-              (ref) =>
-                new Promise(async (resolve) => {
-                  if (ref.isDead()) resolve(null);
-                  else {
-                    const refCoords = await ref.getCurrentCoords();
-                    resolve({ ref, refCoords });
-                  }
-                })
-            )
-          )
-        ).filter((data) => data);
+    const near = entitiesData.filter((data) => {
+      const centerCoords = data.refCoords.center;
+      const distance = Math.sqrt(
+        Math.pow(x - centerCoords.x, 2) + Math.pow(y - centerCoords.y, 2)
+      );
+      return distance <= distanceConstant;
+    });
 
-        const near = entitiesData.filter((data) => {
-          const centerCoords = data.refCoords.center;
-          const distance = Math.sqrt(
-            Math.pow(x - centerCoords.x, 2) + Math.pow(y - centerCoords.y, 2)
-          );
-          return distance <= distanceConstant;
+    if (near.length) {
+      const mappingFunc = ({ ref, refCoords: { corners } }) => {
+        const cornersAngles = corners.map(({ x: refX, y: refY }) => {
+          return getTangensAngle({ x, y }, { x: refX, y: refY });
         });
+        const min = Math.min(...cornersAngles);
+        const max = Math.max(...cornersAngles);
 
-        if (near.length) {
-          const mappingFunc = ({ ref, refCoords: { corners } }) => {
-            const cornersAngles = corners.map(({ x: refX, y: refY }) => {
-              const coef = (refY - y) / (refX - x);
-              return Math.atan(coef) + (refX < x ? Math.PI : 0);
-            });
-            const min = Math.min(...cornersAngles);
-            const max = Math.max(...cornersAngles);
+        return {
+          start: min,
+          end: max,
+          ref,
+          isEdgeCase: min < 0 && max > Math.PI,
+        };
+      };
 
-            return {
-              start: min,
-              end: max,
-              ref,
-              isEdgeCase: min < 0 && max > Math.PI,
-            };
-          };
+      const availableIntervals = near.map(mappingFunc);
+      const angleIntervals = entitiesData.map(mappingFunc);
 
-          const availableIntervals = near.map(mappingFunc);
-          const angleIntervals = entitiesData.map(mappingFunc);
-
-          const mostValuableIntervalSet = availableIntervals
-            .map((interval) =>
-              angleIntervals.filter((angleInterval) => {
-                if (interval.isEdgeCase && angleInterval.isEdgeCase)
-                  return true;
-                if (interval.isEdgeCase || angleInterval.isEdgeCase) {
-                  const edge = interval.isEdgeCase ? interval : angleInterval;
-                  const over = interval.isEdgeCase ? angleInterval : interval;
-                  return over.start <= edge.start || over.end >= edge.end;
-                }
-                return (
-                  angleInterval.end >= interval.start &&
-                  angleInterval.start <= interval.end
-                );
-              })
-            )
-            .reduce((prev, cur) => (cur.length > prev.length ? cur : prev), []);
-
-          const edgeValues = mostValuableIntervalSet.flatMap((interval) => [
-            interval.start,
-            interval.end,
-          ]);
-
-          let maxInterval = [];
-          let resultRefs = [];
-          let maxCount = 0;
-
-          for (let edgeValue of edgeValues) {
-            let curCount = 0;
-            let refs = [];
-
-            for (let interval of mostValuableIntervalSet) {
-              if (
-                (interval.isEdgeCase &&
-                  (edgeValue <= interval.start || edgeValue >= interval.end)) ||
-                (!interval.isEdgeCase &&
-                  edgeValue >= interval.start &&
-                  edgeValue <= interval.end)
-              ) {
-                curCount++;
-                refs.push(interval.ref);
-              }
+      const mostValuableIntervalSet = availableIntervals
+        .map((interval) =>
+          angleIntervals.filter((angleInterval) => {
+            if (interval.isEdgeCase && angleInterval.isEdgeCase) return true;
+            if (interval.isEdgeCase || angleInterval.isEdgeCase) {
+              const edge = interval.isEdgeCase ? interval : angleInterval;
+              const over = interval.isEdgeCase ? angleInterval : interval;
+              return over.start <= edge.start || over.end >= edge.end;
             }
-            if (curCount > maxCount) {
-              maxInterval = [edgeValue];
-              maxCount = curCount;
-              resultRefs = refs;
-            } else if (curCount === maxCount && maxInterval.length === 1) {
-              maxInterval.push(edgeValue);
-            }
+            return (
+              angleInterval.end >= interval.start &&
+              angleInterval.start <= interval.end
+            );
+          })
+        )
+        .reduce((prev, cur) => (cur.length > prev.length ? cur : prev), []);
+
+      const edgeValues = mostValuableIntervalSet
+        .flatMap((interval) => [interval.start, interval.end])
+        .sort();
+
+      let maxInterval = [];
+      let resultRefs = [];
+      let maxCount = 0;
+
+      for (let edgeValue of edgeValues) {
+        let curCount = 0;
+        let refs = [];
+
+        for (let interval of mostValuableIntervalSet) {
+          if (
+            (interval.isEdgeCase &&
+              (edgeValue <= interval.start || edgeValue >= interval.end)) ||
+            (!interval.isEdgeCase &&
+              edgeValue >= interval.start &&
+              edgeValue <= interval.end)
+          ) {
+            curCount++;
+            refs.push(interval.ref);
           }
-
-          const isEdgeCase =
-            Math.min(...maxInterval) < 0 && Math.max(...maxInterval) > Math.PI;
-
-          const angle =
-            maxInterval.reduce(
-              (prev, cur) =>
-                cur < 0 && isEdgeCase ? Math.PI * 2 + cur + prev : cur + prev,
-              0
-            ) / 2;
-          rotateAnimatedValue.setValue(angle);
-          animate(
-            lazerAnimatedValue,
-            { toValue: 1, duration: 300, easing: Easing.linear },
-            () => lazerAnimatedValue.setValue(0)
-          );
-          resultRefs.forEach((ref) => ref.damage(GunsInfo.gg.damage * level));
         }
-      });
-    }, 1000);
+        if (curCount > maxCount) {
+          maxInterval = [edgeValue];
+          maxCount = curCount;
+          resultRefs = refs;
+        } else if (curCount === maxCount && maxInterval.length === 1) {
+          maxInterval.push(edgeValue);
+        }
+      }
+
+      const isEdgeCase =
+        Math.min(...maxInterval) < 0 && Math.max(...maxInterval) > Math.PI;
+
+      const angle =
+        maxInterval.reduce(
+          (prev, cur) =>
+            cur < 0 && isEdgeCase ? Math.PI * 2 + cur + prev : cur + prev,
+          0
+        ) / 2;
+      rotateAnimatedValue.setValue(angle);
+      animate(
+        lazerAnimatedValue,
+        { toValue: 1, duration: 300, easing: Easing.linear },
+        () => lazerAnimatedValue.setValue(0)
+      );
+      resultRefs.forEach((ref) => ref.damage(GunsInfo.gg.damage * level));
+    }
   };
 
-  const stopInterval = () => {
-    clearInterval(intervalRef.current);
-  };
-
-  useEffect(() => {
-    return function cleanup() {
-      stopInterval();
-    };
-  }, []);
-
-  useEffect(() => {
-    let toValue = 0;
-    if (isSelected) toValue = 1;
-    animate(selectionAnimatedValue, { toValue, duration: 500 });
-  }, [isSelected]);
-
-  useEffect(() => {
-    if (isActive) startInterval();
-    else stopInterval();
-  }, [isActive]);
+  useGunLogic({
+    ref,
+    gunRef,
+    intervalRef,
+    selectionAnimatedValue,
+    tickFunc,
+    tickIntervalValue: 1000,
+  });
 
   const renderLazer = () => {
     return (
@@ -189,12 +160,11 @@ export default function GreenGun({ level, size, cellSize, isSelected, isActive }
     );
   };
 
-
   const renderTrapezoid = () => {
     return (
       <Feather
         name="triangle"
-        size={size*0.8}
+        size={size * 0.8}
         color="#6DF826"
         style={{ position: "absolute", transform: [{ rotate: "90deg" }] }}
       />
@@ -234,7 +204,7 @@ export default function GreenGun({ level, size, cellSize, isSelected, isActive }
         <View
           style={{
             width: size,
-            gap: level === 4 ? -size * 0.3 : -size*0.1,
+            gap: level === 4 ? -size * 0.3 : -size * 0.05,
             right: -size * 0.2,
             backgroundColor: "black",
             display: "flex",
@@ -262,4 +232,6 @@ export default function GreenGun({ level, size, cellSize, isSelected, isActive }
       ></Animated.View>
     </View>
   );
-}
+});
+
+export default GreenGun;

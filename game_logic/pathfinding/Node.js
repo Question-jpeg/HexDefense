@@ -1,4 +1,5 @@
 import { rowColReverter } from "../../utils/rowColDoubler";
+import { isTypeWalkable } from "./../../utils/isTypeWalkable";
 
 export class Node {
   Col;
@@ -18,9 +19,9 @@ export class Node {
     this.Row = row;
     this.Type = type;
   }
-  
+
   get Walkable() {
-    return this.Type === 's' || this.Type === true
+    return isTypeWalkable(this.Type);
   }
 
   get F() {
@@ -28,9 +29,8 @@ export class Node {
   }
 
   GetNeighbors(field) {
-
-    const col = this.Col
-    const row = this.Row
+    const col = this.Col;
+    const row = this.Row;
 
     const vectors = [
       [col, row - 2],

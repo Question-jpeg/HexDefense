@@ -34,7 +34,36 @@
 //   ].some((cur) => cur[0] === doubled[0] && cur[1] === doubled[1])
 // );
 
-console.log([2, 12].toString() === [3, 12].toString());
-console.log([2, 12].toString());
+// console.log([2, 12].toString() === [3, 12].toString());
+// console.log([2, 12].toString());
 
-console.log(Boolean({}));
+// console.log(Boolean({}));
+
+const intervals = [
+  [1, 3],
+  [3, 5],
+  [2, 4],
+];
+
+const edges = intervals.flatMap((interval) => interval).sort();
+
+let maxCount = 0
+let maxInterval = []
+for (let edge of edges) {
+  let curCount = 0;
+
+  for (let interval of intervals) {
+    if (edge >= interval[0] && edge <= interval[1]) {
+      curCount++;
+    }
+  }
+  if (curCount > maxCount) {
+    maxInterval = [edge];
+    maxCount = curCount;
+  } else if (curCount === maxCount && maxInterval.length === 1) {
+    maxInterval.push(edge);
+  }
+}
+
+console.log(maxInterval.reduce((prev, cur) => (prev + cur), 0) / 2)
+// console.log(maxInterval);
